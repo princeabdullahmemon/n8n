@@ -1,0 +1,709 @@
+{
+  "name": "Smart Job Application Tracker with AI Classification",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 5,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "filters": {
+          "q": "interview OR application OR shortlisted OR rejected OR offer"
+        }
+      },
+      "id": "95c331cc-49cd-4adf-80d2-9f9f79ddca47",
+      "name": "Gmail Trigger - Job Emails",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2096,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_email",
+              "value": "<__PLACEHOLDER_VALUE__YOUR_EMAIL@gmail.com__>",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "keywords",
+              "value": "interview,application,shortlisted,rejected,offer",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b445fbb1-c2a3-4288-90bf-573b8b43a7c9",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1872,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "email_subject",
+              "value": "={{ $('Gmail Trigger - Job Emails').item.json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "email_body",
+              "value": "={{ $('Gmail Trigger - Job Emails').item.json.snippet || $('Gmail Trigger - Job Emails').item.json.plainText || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "email_from",
+              "value": "={{ $('Gmail Trigger - Job Emails').item.json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "email_date",
+              "value": "={{ $('Gmail Trigger - Job Emails').item.json.date }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4690e3ab-baaa-45c0-9dc3-fa7737e363ff",
+      "name": "Extract Email Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1648,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n\t\"type\": \"object\",\n\t\"properties\": {\n\t\t\"status\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"enum\": [\"Rejection\", \"Interview\", \"Offer\", \"Other\"],\n\t\t\t\"description\": \"Classification of the email\"\n\t\t},\n\t\t\"company\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Company name extracted from email\"\n\t\t},\n\t\t\"job_role\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Job role/position mentioned in email\"\n\t\t},\n\t\t\"confidence_score\": {\n\t\t\t\"type\": \"number\",\n\t\t\t\"description\": \"Confidence score from 0-100\"\n\t\t}\n\t},\n\t\"required\": [\"status\", \"company\", \"job_role\", \"confidence_score\"]\n}"
+      },
+      "id": "ff1a9224-d983-4f2b-ace8-277dd30901e9",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -1416,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "78d2c9ca-e662-4a50-a571-dd39af45eb3c",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1288,
+        400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "Y0KRgID1O5XxqELm",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this email:\n\nSubject: {{ $json.email_subject }}\nFrom: {{ $json.email_from }}\nBody: {{ $json.email_body }}\n\nClassify it and extract the required information.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an expert email classifier for job applications. Your task is to analyze emails and classify them into one of these categories:\n\n1. **Rejection** - Email indicates application was rejected or not selected\n2. **Interview** - Email is scheduling or confirming an interview, or requesting interview availability\n3. **Offer** - Email contains a job offer or offer letter\n4. **Other** - Email is related to job applications but doesn't fit above categories (acknowledgment, follow-up, etc.)\n\nYou must extract:\n- status: One of [Rejection, Interview, Offer, Other]\n- company: The company name\n- job_role: The job position/role\n- confidence_score: Your confidence in this classification (0-100)\n\nBe precise and conservative with confidence scores."
+        }
+      },
+      "id": "4141dd6e-9f85-4430-8e5c-967cce271982",
+      "name": "AI Agent - Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1424,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.output }}",
+              "operator": {
+                "type": "object",
+                "operation": "exists"
+              }
+            },
+            {
+              "id": "id-2",
+              "leftValue": "={{ $json.output !== undefined && $json.output !== null && $json.output.status !== undefined }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "09275a73-e328-452a-a251-e98e9205d686",
+      "name": "Check AI Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1072,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "format": "custom",
+        "customFormat": "yyyy-MM-dd HH:mm:ss",
+        "outputFieldName": "current_date",
+        "options": {}
+      },
+      "id": "58f4884c-8d9f-4034-85ae-f88ec35ec5ae",
+      "name": "Add Current Date",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "Date",
+              "value": "={{ $json.current_date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "Company",
+              "value": "={{ $json.output.company }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "Job Role",
+              "value": "={{ $json.output.job_role }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "Status",
+              "value": "={{ $json.output.status }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "Confidence Score",
+              "value": "={{ $json.output.confidence_score }}",
+              "type": "number"
+            },
+            {
+              "id": "id-6",
+              "name": "Email Subject",
+              "value": "={{ $json.email_subject }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f023b5ac-0af7-4dfa-a479-2eec41fdf5a6",
+      "name": "Format for Google Sheets",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -624,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.output.status }}",
+              "rightValue": "Interview",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "id-2",
+              "leftValue": "={{ $json.output.status }}",
+              "rightValue": "Offer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "72cd55fe-6e83-4ad5-8cff-9b80bdcee3b1",
+      "name": "Route by Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -400,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Workflow Configuration').item.json.user_email }}",
+        "subject": "={{ '🎯 IMPORTANT: ' + $json.output.status + ' - ' + $json.output.company }}",
+        "message": "={{ '<!DOCTYPE html><html><body style=\"font-family: Arial, sans-serif;\"><h2 style=\"color: #2e7d32;\">📧 Job Application Update - ' + $json.output.status + '</h2><p><strong>Company:</strong> ' + $json.output.company + '</p><p><strong>Job Role:</strong> ' + $json.output.job_role + '</p><p><strong>Status:</strong> ' + $json.output.status + '</p><p><strong>Confidence:</strong> ' + $json.output.confidence_score + '%</p><hr><p><strong>Original Email Subject:</strong> ' + $json.email_subject + '</p><p><strong>From:</strong> ' + $json.email_from + '</p><p style=\"margin-top: 20px; padding: 10px; background-color: #fff3cd; border-left: 4px solid #ffc107;\">⚠️ This is an important update regarding your job application. Please review the original email for details.</p></body></html>' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7a40208e-62ff-49fd-8791-711c8e4bf843",
+      "name": "Send Important Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        -16
+      ],
+      "webhookId": "8f1823ce-0b37-44e9-910c-bc937ae163ce"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Workflow Configuration').item.json.user_email }}",
+        "subject": "={{ 'Job Application Update: ' + $json.output.status + ' - ' + $json.output.company }}",
+        "message": "={{ '<!DOCTYPE html><html><body style=\"font-family: Arial, sans-serif;\"><h2>📧 Job Application Update</h2><p><strong>Company:</strong> ' + $json.output.company + '</p><p><strong>Job Role:</strong> ' + $json.output.job_role + '</p><p><strong>Status:</strong> ' + $json.output.status + '</p><p><strong>Confidence:</strong> ' + $json.output.confidence_score + '%</p><hr><p><strong>Original Email Subject:</strong> ' + $json.email_subject + '</p><p><strong>From:</strong> ' + $json.email_from + '</p></body></html>' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7e5e1480-cf9f-4d26-a12c-69f28fda97ef",
+      "name": "Send Normal Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        176
+      ],
+      "webhookId": "f048942a-9523-4976-8e54-3f6c8aaa6cec"
+    },
+    {
+      "parameters": {},
+      "id": "6e46e7b3-f71c-4684-949a-9d17d62beae2",
+      "name": "Merge Notification Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        48,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<__PLACEHOLDER_VALUE__YOUR_GOOGLE_SHEET_ID__>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Applications"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "Date": "={{ $json.Date }}",
+            "Company": "={{ $json.Company }}",
+            "Job Role": "={{ $json['Job Role'] }}",
+            "Status": "={{ $json.Status }}",
+            "Confidence Score": "={{ $json['Confidence Score'] }}",
+            "Email Subject": "={{ $json['Email Subject'] }}"
+          },
+          "matchingColumns": [
+            "Email Subject"
+          ],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Role",
+              "displayName": "Job Role",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Confidence Score",
+              "displayName": "Confidence Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email Subject",
+              "displayName": "Email Subject",
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ca0a0cd1-801d-43e9-b3c7-3521891677b3",
+      "name": "Log to Main Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        272,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "Date",
+              "value": "={{ new Date().toISOString().slice(0, 19).replace('T', ' ') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "Email Subject",
+              "value": "={{ $json.email_subject }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "Email From",
+              "value": "={{ $json.email_from }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "Email Body Preview",
+              "value": "={{ $json.email_body ? $json.email_body.substring(0, 200) : 'N/A' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "Error Reason",
+              "value": "AI Classification Failed",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "Raw AI Output",
+              "value": "={{ JSON.stringify($json.output || {}) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2832e5b8-58ac-45f2-a95e-6cbda8926aa7",
+      "name": "Format Error for Manual Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -848,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<__PLACEHOLDER_VALUE__YOUR_GOOGLE_SHEET_ID__>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Manual Review"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.Date }}",
+            "Email Subject": "={{ $json['Email Subject'] }}",
+            "Email From": "={{ $json['Email From'] }}",
+            "Email Body Preview": "={{ $json['Email Body Preview'] }}",
+            "Error Reason": "={{ $json['Error Reason'] }}",
+            "Raw AI Output": "={{ $json['Raw AI Output'] }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ef296082-6da2-4d02-b182-217606e5237f",
+      "name": "Log to Manual Review Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -624,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger - Job Emails": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent - Classify Email",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Classify Email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Check AI Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check AI Success": {
+      "main": [
+        [
+          {
+            "node": "Add Current Date",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error for Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Current Date": {
+      "main": [
+        [
+          {
+            "node": "Format for Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Route by Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Status": {
+      "main": [
+        [
+          {
+            "node": "Send Important Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Normal Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Important Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Notification Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Normal Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Notification Branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Notification Branches": {
+      "main": [
+        [
+          {
+            "node": "Log to Main Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error for Manual Review": {
+      "main": [
+        [
+          {
+            "node": "Log to Manual Review Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "696d0645-e94c-41b8-8eb3-3a6f09c366b1",
+  "meta": {
+    "instanceId": "d9d6e6b4e0223fc91c1487a748eeb47f5ec0f80b616c43e2bb91dac3042a599d"
+  },
+  "id": "Y1a3hpPuPAgJ5qUmu4izt",
+  "tags": []
+}
